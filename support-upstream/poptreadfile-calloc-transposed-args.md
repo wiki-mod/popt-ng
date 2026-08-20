@@ -61,25 +61,84 @@ style.
 
 ## Empirical verification
 
-Verified on a real remote host (not local), inside the mandated
-`ghcr.io/wiki-mod/distcc-ng-buildtools:latest` container (Debian 13/trixie,
-GCC 14.2.0), against the identical source vendored into
-`wiki-mod/distcc-ng`'s `popt/` fallback tree (same upstream 1.19 origin,
-identical `poptconfig.c` content at the time of this check -- this
-specific verification was run against that vendored copy, not an
-independent build of this repository's own CMake/autotools build system):
+All commands below were run on a real remote host (never local), against
+a fresh, direct `git clone` of this fork.
 
-- **Before the fix:** `./configure --without-system-popt && make
-  popt/poptconfig.o` fails with `error: 'calloc' sizes specified with
-  'sizeof' in the earlier argument and not in the later argument
-  [-Werror=calloc-transposed-args]`, exit code 2.
-- **After the fix** (transposing the two arguments): the identical build
-  command compiles `poptconfig.o` cleanly, exit code 0.
-- **No regression:** a full `./configure --without-system-popt && make &&
-  make check` run with the fix applied completes the build and the vast
-  majority of the test suite (one unrelated, environment-specific test
-  failure was observed and traced to the test container's own user setup,
-  not this change).
+**Step 1 -- isolated before/after repro of this exact fix**, inside the
+mandated `ghcr.io/wiki-mod/distcc-ng-buildtools:latest` container (Debian
+13/trixie, GCC 14.2.0), against the identical source vendored into
+`wiki-mod/distcc-ng`'s `popt/` fallback tree (same upstream 1.19 origin):
+
+Before the fix:
+
+```console
+$ ./configure --without-system-popt PYTHON="$(which python3)"
+$ make popt/poptconfig.o
+...
+popt/poptconfig.c: In function 'poptReadFile':
+popt/poptconfig.c:141:27: error: 'calloc' sizes specified with 'sizeof'
+  in the earlier argument and not in the later argument
+  [-Werror=calloc-transposed-args]
+make: *** [Makefile:501: popt/poptconfig.o] Error 1
+$ echo $?
+2
+```
+
+After the fix (transposing the two arguments):
+
+```console
+$ ./configure --without-system-popt PYTHON="$(which python3)"
+$ make popt/poptconfig.o
+gcc [...] -o popt/poptconfig.o -c popt/poptconfig.c
+$ echo $?
+0
+```
+
+**Step 2 -- this repository's own real CI recipe (`ci/Dockerfile`), with
+the fix applied, on a current, supported Fedora release** (this PR also
+bumps the CI image itself, see below):
+
+```console
+$ docker build -f ci/Dockerfile -t popt-verify .
+$ docker run --rm popt-verify
+Test project /srv/popt/build
+    Start 1: test1_build
+1/6 Test #1: test1_build ......................   Passed    0.98 sec
+    Start 2: test2_build
+2/6 Test #2: test2_build ......................   Passed    0.16 sec
+    Start 3: test3_build
+3/6 Test #3: test3_build ......................   Passed    0.14 sec
+    Start 4: tdict_build
+4/6 Test #4: tdict_build ......................   Passed    0.15 sec
+    Start 5: tstuff_build
+5/6 Test #5: tstuff_build .....................   Passed    0.14 sec
+    Start 6: testit
+6/6 Test #6: testit ...........................   Passed    0.56 sec
+
+100% tests passed, 0 tests failed out of 6
+```
+
+**Companion CI fix, same PR:** `ci/Dockerfile` was still pinned to
+`fedora:39`, which reached end-of-life on 2024-11-26 (this project's own
+history shows it was bumped 36 -> 39 back in 2024-03-04 for the same
+staleness reason -- `1a1076c8`, "Bump CI to Fedora 39, 36 is getting a bit
+long in the tooth"). Bumped to `fedora:44` (current supported release).
+This surfaced the `-Werror=calloc-transposed-args` failure above in the
+first place: Fedora 39's GCC 13 doesn't have that check yet, so the
+transposed-args bug was silently compiling clean there.
+
+**Also added in this PR:** a `.gitattributes` (`* text=auto eol=lf`,
+excluding `*.pdf`) -- this repository had none, so a contributor checking
+out on Windows with the (very common) default `core.autocrlf=true` gets
+every text file re-written with CRLF line endings on checkout, which then
+breaks `#!/bin/sh` shebang lines and file-comparison tests the moment that
+checkout is used anywhere outside Windows itself. Confirmed this isn't a
+pre-existing content problem in the repository itself first: a fresh,
+direct `git clone` of this fork on a real Linux host, followed by `git
+status`/`git diff --stat` after running a CRLF normalizer over the whole
+tree, showed zero actual changes -- the real, committed content is
+already consistently LF. `.gitattributes` makes that guaranteed by policy
+rather than by accident.
 
 ## Upstream status
 
