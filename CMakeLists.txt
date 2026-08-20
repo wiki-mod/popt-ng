@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.12)
 cmake_policy(VERSION ${CMAKE_MAJOR_VERSION}.${CMAKE_MINOR_VERSION})
 
 project(popt
-	VERSION 1.19
+	VERSION 1.19.1
 	DESCRIPTION "Portable library for parsing command line parameters"
 	LANGUAGES C
 )
