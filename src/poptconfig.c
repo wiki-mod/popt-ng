@@ -138,7 +138,7 @@ int poptReadFile(const char * fn, char ** bp, size_t * nbp, int flags)
     if ((nb = lseek(fdno, 0, SEEK_END)) == (off_t)-1
      || (uintmax_t)nb >= SIZE_MAX
      || lseek(fdno, 0, SEEK_SET) == (off_t)-1
-     || (b = calloc(sizeof(*b), (size_t)nb + 1)) == NULL
+     || (b = calloc((size_t)nb + 1, sizeof(*b))) == NULL
      || read(fdno, (char *)b, (size_t)nb) != (ssize_t)nb)
     {
 	int oerrno = errno;
